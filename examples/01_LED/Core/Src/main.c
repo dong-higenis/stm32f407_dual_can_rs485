@@ -87,26 +87,39 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   /* USER CODE BEGIN 2 */
-  uint32_t prev_time = 0;
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-
   while (1)
   {
-    uint32_t current_time = HAL_GetTick();
-
-    if (current_time - prev_time >= 250)
-    {
-      prev_time = current_time;
-      HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
-      HAL_GPIO_TogglePin(LED2_GPIO_Port, LED2_Pin);
-      HAL_GPIO_TogglePin(LED3_GPIO_Port, LED3_Pin);
-    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+#if 1
+	GPIOE->ODR |= 0x2000;
+	HAL_Delay(500);
+	GPIOE->ODR &= ~0x2000;
+	HAL_Delay(500);
+#endif
+#if 0
+  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET);   // LED1 OFF
+  HAL_Delay(500);
+  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_RESET); // LED1 ON
+  HAL_Delay(500);
+#endif
+#if 0
+	  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_RESET); // LED1 ON
+	  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_SET);   // LED2 OFF
+	  HAL_Delay(500);
+	  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_RESET); // LED2 ON
+    HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, GPIO_PIN_SET);   // LED3 OFF
+    HAL_Delay(500);
+    HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, GPIO_PIN_RESET); // LED3 ON
+    HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET);   // LED1 OFF
+    HAL_Delay(500);
+#endif
   }
   /* USER CODE END 3 */
 }
