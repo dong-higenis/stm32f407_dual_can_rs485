@@ -92,27 +92,34 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-
   while (1)
-  { // This code does not take debounce into account.
-    if(HAL_GPIO_ReadPin(BTN1_GPIO_Port, BTN1_Pin) == 0)
-    {
-      HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
-    }
-
-    if(HAL_GPIO_ReadPin(BTN2_GPIO_Port, BTN2_Pin) == 0)
-    {
-      HAL_GPIO_TogglePin(LED2_GPIO_Port, LED2_Pin);
-    }
-
-    if(HAL_GPIO_ReadPin(BTN3_GPIO_Port, BTN3_Pin) == 0)
-    {
-      HAL_GPIO_TogglePin(LED3_GPIO_Port, LED3_Pin);
-    }
-
+  {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    /* BUTTON1 - LED1 */
+    if(HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_10) == GPIO_PIN_RESET) // Btn1 Pressed
+      HAL_GPIO_WritePin(GPIOE, GPIO_PIN_13, GPIO_PIN_RESET);   // LED1 ON
+    else
+      HAL_GPIO_WritePin(GPIOE, GPIO_PIN_13, GPIO_PIN_SET);     // LED1 OFF
+    /* BUTTON2 - LED2 */
+    if(HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_11) == GPIO_PIN_RESET) // Btn2 Pressed
+      HAL_GPIO_WritePin(GPIOE, GPIO_PIN_14, GPIO_PIN_RESET);   // LED2 ON
+    else
+      HAL_GPIO_WritePin(GPIOE, GPIO_PIN_14, GPIO_PIN_SET);     // LED2 OFF
+    /* BUTTON3 - LED1 LED2 LED3 */
+    if(HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_12) == GPIO_PIN_RESET) // Btn3 Pressed
+    {
+      HAL_GPIO_WritePin(GPIOE, GPIO_PIN_13, GPIO_PIN_RESET);   // LED1 ON
+      HAL_GPIO_WritePin(GPIOE, GPIO_PIN_14, GPIO_PIN_RESET);   // LED2 ON
+      HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, GPIO_PIN_RESET);   // LED3 ON
+    }
+    else
+    {
+      HAL_GPIO_WritePin(GPIOE, GPIO_PIN_13, GPIO_PIN_SET);     // LED1 OFF
+      HAL_GPIO_WritePin(GPIOE, GPIO_PIN_14, GPIO_PIN_SET);     // LED2 OFF
+      HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, GPIO_PIN_SET);     // LED3 OFF
+    }
   }
   /* USER CODE END 3 */
 }
