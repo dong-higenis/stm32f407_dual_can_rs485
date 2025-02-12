@@ -18,14 +18,13 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "i2c.h"
+#include "spi.h"
 #include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <stdio.h>   // for printf
-#include <string.h>  // for memcmp
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,7 +34,16 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define W25Q128_CS_LOW()  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, GPIO_PIN_RESET)
+#define W25Q128_CS_HIGH() HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, GPIO_PIN_SET)
 
+#define W25Q128_CMD_WRITE_ENABLE   0x06
+#define W25Q128_CMD_READ_ID        0x9F
+#define W25Q128_CMD_READ_DATA      0x03
+#define W25Q128_CMD_PAGE_PROGRAM   0x02
+#define W25Q128_CMD_SECTOR_ERASE   0x20
+#define W25Q128_CMD_CHIP_ERASE     0xC7
+#define W25Q128_CMD_READ_STATUS1   0x05
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -46,9 +54,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-#define EEPROM_I2C_ADDR 0xA0
 
-uint8_t WriteBuffer[256], ReadBuffer[256];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -59,28 +65,91 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-
 int _write(int file, char *ptr, int len)
 {
-  HAL_UART_Transmit(&huart1, (uint8_t *)ptr, len, 50);
+  HAL_UART_Transmit(&huart1, (const uint8_t*)ptr, len, 50);
   return len;
 }
 
+///////////////// W25Q128 Functions /////////////////
+// W25Q128 Read ID
+uint32_t W25Q128_ReadID(SPI_HandleTypeDef *hspi) {
+  uint8_t cmd = W25Q128_CMD_READ_ID;
+  uint8_t id[3] = {0};
 
-void EEPROM_Write_Page(I2C_HandleTypeDef *hi2c, uint8_t devAddr,
-                       uint8_t memAddr, uint8_t *data, uint8_t length) {
-    if (length > 8) length = 8; // Maximum 8 bytes limit
+  W25Q128_CS_LOW();
+  HAL_SPI_Transmit(hspi, &cmd, 1, HAL_MAX_DELAY);
+  HAL_SPI_Receive(hspi, id, 3, HAL_MAX_DELAY);
+  W25Q128_CS_HIGH();
 
-    HAL_I2C_Mem_Write(hi2c, devAddr, memAddr, I2C_MEMADD_SIZE_8BIT,
-                      data, length, HAL_MAX_DELAY);
-    HAL_Delay(5); // Wait for EEPROM write completion
+  printf("\nManufacturer ID: 0x%X, Memory Type: 0x%X, Capacity: 0x%X\n", id[0], id[1], id[2]);
+
+  return (id[0] << 16) | (id[1] << 8) | id[2];
 }
 
-void EEPROM_Write_Buffer(uint8_t *data, uint16_t size) {
-    for (uint16_t i = 0; i < size; i += 8) {
-      EEPROM_Write_Page(&hi2c1, EEPROM_I2C_ADDR, i, &data[i], 8);
-    }
+// W25Q128 Write Enable
+void W25Q128_WriteEnable(SPI_HandleTypeDef *hspi) {
+  uint8_t cmd = W25Q128_CMD_WRITE_ENABLE;
+
+  W25Q128_CS_LOW();
+  HAL_SPI_Transmit(hspi, &cmd, 1, HAL_MAX_DELAY);
+  W25Q128_CS_HIGH();
+}
+
+/* W25Q128 Write Page
+ *
+ * Only writeable within page size (256B)!
+ * Must erase sectors (4KB) before writing new data.
+*/
+void W25Q128_WritePage(SPI_HandleTypeDef *hspi, uint32_t address, uint8_t *data, uint16_t length) {
+  uint8_t cmd[4];
+
+  if (length > 256) return;  // Page size is limited to 256 bytes
+
+  W25Q128_WriteEnable(hspi);  // Enable writing
+
+  cmd[0] = W25Q128_CMD_PAGE_PROGRAM;
+  cmd[1] = (address >> 16) & 0xFF;
+  cmd[2] = (address >> 8) & 0xFF;
+  cmd[3] = address & 0xFF;
+
+  W25Q128_CS_LOW();
+  HAL_SPI_Transmit(hspi, cmd, 4, HAL_MAX_DELAY);
+  HAL_SPI_Transmit(hspi, data, length, HAL_MAX_DELAY);
+  W25Q128_CS_HIGH();
+}
+
+// W25Q128 Erase sector
+void W25Q128_EraseSector(SPI_HandleTypeDef *hspi, uint32_t address) {
+  uint8_t cmd[4];
+
+  W25Q128_WriteEnable(hspi);  // 쓰기 활성화
+
+  cmd[0] = W25Q128_CMD_SECTOR_ERASE;
+  cmd[1] = (address >> 16) & 0xFF;
+  cmd[2] = (address >> 8) & 0xFF;
+  cmd[3] = address & 0xFF;
+
+  W25Q128_CS_LOW();
+  HAL_SPI_Transmit(hspi, cmd, 4, HAL_MAX_DELAY);
+  W25Q128_CS_HIGH();
+
+  HAL_Delay(50);  // 섹터 지우기 대기 (최대 50ms)
+}
+
+// Read Data from W25Q128
+void W25Q128_ReadData(SPI_HandleTypeDef *hspi, uint32_t address, uint8_t *buffer, uint16_t length) {
+  uint8_t cmd[4];
+
+  cmd[0] = W25Q128_CMD_READ_DATA;
+  cmd[1] = (address >> 16) & 0xFF;
+  cmd[2] = (address >> 8) & 0xFF;
+  cmd[3] = address & 0xFF;
+
+  W25Q128_CS_LOW();
+  HAL_SPI_Transmit(hspi, cmd, 4, HAL_MAX_DELAY);
+  HAL_SPI_Receive(hspi, buffer, length, HAL_MAX_DELAY);
+  W25Q128_CS_HIGH();
 }
 
 /* USER CODE END 0 */
@@ -114,27 +183,25 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_I2C1_Init();
+  MX_SPI2_Init();
   MX_USART1_UART_Init();
+
   /* USER CODE BEGIN 2 */
-  printf("\r\n*************** I2C Example ***************\r\n");
-  for(uint16_t i=0; i < sizeof(WriteBuffer); i++)
-    WriteBuffer[i] = i;  /* WriteBuffer Init */
+  uint8_t writeData[16] = "Hello, W25Q128!";
+  uint8_t readData[16] = {0};
 
-  /* write data to EEPROM */
-  printf("Write data to EEPROM\r\n");
-  EEPROM_Write_Buffer(WriteBuffer, sizeof(WriteBuffer));
+  printf("\nW25Q128 Read ID");
+  W25Q128_ReadID(&hspi2);
 
-  /* read data from EEPROM */
-  printf("Read data from EEPROM\r\n");
-  HAL_I2C_Mem_Read(&hi2c1, EEPROM_I2C_ADDR, 0, I2C_MEMADD_SIZE_8BIT,
-                   ReadBuffer, sizeof(ReadBuffer), HAL_MAX_DELAY);
+  printf("\nW25Q128 Write Data\n");
+  W25Q128_WriteEnable(&hspi2);
+  W25Q128_WritePage(&hspi2, 0x000000, writeData, sizeof(writeData));
+  HAL_Delay(50);
 
-  if(memcmp(WriteBuffer, ReadBuffer, sizeof(WriteBuffer)) == 0 ) /* check data */
-    printf("\r\nEEPROM 24C02 Compare Write/Read Test OK\r\n");
-  else
-    printf("\r\nEEPROM 24C02 Compare Write/Read Test False\r\n");
+  printf("\nW25Q128 Read Data\n");
+  W25Q128_ReadData(&hspi2, 0x000000, readData, sizeof(readData));
 
+  printf("readData:%s\n", readData);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -165,13 +232,12 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 8;
-  RCC_OscInitStruct.PLL.PLLN = 168;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 25;
+  RCC_OscInitStruct.PLL.PLLN = 336;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 4;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
